@@ -1,19 +1,15 @@
 use std::env;
-use std::fmt::Display;
 
 use reqwest::Error;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
-use serenity::async_trait;
-use serenity::client::{Client, Context, EventHandler};
-use serenity::framework::standard::{Args, CommandResult, macros::{
-    command,
-    group,
-}, StandardFramework};
+use serenity::{async_trait, Client};
+use serenity::client::{Context, EventHandler};
+use serenity::framework::standard::{Args, CommandResult, macros::{command, group}};
+use serenity::framework::StandardFramework;
 use serenity::model::channel::Message;
 use serenity::model::gateway::{Activity, Ready};
 use serenity::prelude::TypeMapKey;
-use serenity::static_assertions::_core::fmt::Formatter;
 use tokio::time;
 use tracing::info;
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
@@ -98,16 +94,6 @@ struct Stats {
     low: String,
     volume: String,
     last: String,
-}
-
-impl Display for Stats {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Open   = {} €\n\
-                   High   = {} €\n\
-                   Low    = {} €\n\
-                   Volume = {} €\n\
-                   Last   = {} €", self.open, self.high, self.low, self.volume, self.last)
-    }
 }
 
 fn get_product(args: &Args) -> (String, String) {
