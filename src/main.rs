@@ -1,20 +1,24 @@
 use std::env;
 
-use reqwest::Error;
-use serde::de::DeserializeOwned;
-use serde::Deserialize;
 use serenity::{async_trait, Client};
 use serenity::client::{Context, EventHandler};
-use serenity::framework::standard::{Args, CommandResult, macros::{command, group}};
+use serenity::framework::standard::macros::group;
 use serenity::framework::StandardFramework;
-use serenity::model::channel::Message;
 use serenity::model::gateway::{Activity, Ready};
-use serenity::prelude::TypeMapKey;
 use tokio::time;
-use tracing::info;
+use tracing::{error, info};
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
-const COINBASE_PRO_API: &str = "https://api.pro.coinbase.com";
+use commands::{
+    price::*,
+    stats::*,
+};
+
+use crate::api::coinbase_pro::{get_coinbase, Ticker};
+use crate::api::HttpClient;
+
+mod commands;
+mod api;
 
 #[group]
 #[commands(preis, stats)]
@@ -36,17 +40,12 @@ impl EventHandler for Handler {
             let http_client = data.get::<HttpClient>().unwrap();
             let json_result = get_coinbase::<Ticker>(http_client, "/products/BTC-EUR/ticker".to_string()).await;
 
-            if let Ok(ticker) = json_result {
-                ctx.set_activity(Activity::playing(format!("BTC @ {} €", ticker.price).as_str())).await;
+            match json_result {
+                Ok(ticker) => ctx.set_activity(Activity::playing(format!("BTC @ {} €", ticker.price).as_str())).await,
+                Err(e) => error!("{}", e),
             }
         }
     }
-}
-
-struct HttpClient(reqwest::Client);
-
-impl TypeMapKey for HttpClient {
-    type Value = HttpClient;
 }
 
 #[tokio::main]
@@ -80,74 +79,4 @@ async fn main() {
     if let Err(why) = client.start().await {
         println!("An error occurred while running the client: {:?}", why);
     }
-}
-
-#[derive(Deserialize)]
-struct Ticker {
-    price: String,
-}
-
-#[derive(Deserialize)]
-struct Stats {
-    open: String,
-    high: String,
-    low: String,
-    volume: String,
-    last: String,
-}
-
-fn get_product(args: &Args) -> (String, String) {
-    let product = match args.current() {
-        Some(p) => p,
-        None => "BTC",
-    }.to_uppercase();
-
-    (product.clone(), format!("{}-EUR", product))
-}
-
-async fn get_coinbase<T: DeserializeOwned>(http_client: &HttpClient, endpoint: String) -> Result<T, Error> {
-    info!("GET: {}", endpoint);
-
-    http_client.0
-        .get(format!("{}{}", COINBASE_PRO_API, endpoint).as_str())
-        .send().await
-        .unwrap().json::<T>().await
-}
-
-#[command]
-async fn preis(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
-    let data = ctx.data.read().await;
-    let http_client = data.get::<HttpClient>().unwrap();
-    let (product, full_product) = get_product(&args);
-    let json_result = get_coinbase::<Ticker>(http_client, format!("/products/{}/ticker", full_product)).await;
-
-    let message = match json_result {
-        Ok(ticker) => format!("```ini\n1 {} = {} € # Coinbase Pro```", product, ticker.price),
-        Err(_) => format!("Sorry, aber {} kenne ich leider nicht! Dafür bin ich wohl zu blöd... Muuuuh!", product),
-    };
-
-    msg.channel_id.say(&ctx.http, message).await.unwrap();
-    Ok(())
-}
-
-#[command]
-async fn stats(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
-    let data = ctx.data.read().await;
-    let http_client = data.get::<HttpClient>().unwrap();
-    let (product, full_product) = get_product(&args);
-    let json_result = get_coinbase::<Stats>(http_client, format!("/products/{}/stats", full_product)).await;
-
-    let message = match json_result {
-        Ok(stats) => format!("```\
-                                    ini\n[ 24h Stats {} ] # Coinbase Pro\n\n\
-                                    Open   = {} €\n\
-                                    High   = {} €\n\
-                                    Low    = {} €\n\
-                                    Volume = {} {}\n\
-                                    Last   = {} €```", product, stats.open, stats.high, stats.low, stats.volume, product, stats.last),
-        Err(_) => format!("Sorry, aber {} kenne ich leider nicht! Dafür bin ich wohl zu blöd... Muuuuh!", product),
-    };
-
-    msg.channel_id.say(&ctx.http, message).await.unwrap();
-    Ok(())
 }
