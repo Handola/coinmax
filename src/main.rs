@@ -9,13 +9,12 @@ use tokio::time;
 use tracing::{error, info};
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
-use commands::{
+use crate::api::coinbase_pro::{get_coinbase, Ticker};
+use crate::api::HttpClient;
+use crate::commands::{
     price::*,
     stats::*,
 };
-
-use crate::api::coinbase_pro::{get_coinbase, Ticker};
-use crate::api::HttpClient;
 
 mod commands;
 mod api;
@@ -59,7 +58,7 @@ async fn main() {
     tracing::subscriber::set_global_default(subscriber).expect("Failed to start the logger");
 
     let framework = StandardFramework::new()
-        .configure(|c| c.prefix("max "))
+        .configure(|c| c.prefix("max ").case_insensitivity(true))
         .group(&GENERAL_GROUP);
 
     let token = env::var("DISCORD_TOKEN").expect("token");
